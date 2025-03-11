@@ -45,18 +45,44 @@ void handle_client(ClientInfo client) {
             size_t pos = 0;
             while ((pos = message_buffer.find('\n')) != string::npos) {
                 string message = message_buffer.substr(0, pos);
-                string formatted_message = "Client " + to_string(client.socket) + ": " + message + "\n";
-
-                // Save current line and input
-                cout << "\033[s"; // Save cursor position
-                cout << "\033[F"; // Move cursor up
-                cout << "\033[2K"; // Clear the line
-                cout << formatted_message; // Display the incoming message
-                cout << "\033[u"; // Restore cursor position
-                cout << flush;
-
-                broadcast_message(formatted_message, client.socket);
                 message_buffer.erase(0, pos + 1);
+
+                // Check if it's a whisper command
+                if (message.rfind("/whisper ", 0) == 0) {
+                    size_t first_space = message.find(' ', 9);
+                    if (first_space != string::npos) {
+                        string target_socket_str = message.substr(9, first_space - 9);
+                        string whisper_message = message.substr(first_space + 1);
+
+                        SOCKET target_socket = static_cast<SOCKET>(stoi(target_socket_str));
+
+                        lock_guard<mutex> lock(client_mutex);
+                        auto it = find_if(active_clients.begin(), active_clients.end(),
+                            [target_socket](const ClientInfo& c) { return c.socket == target_socket; });
+
+                        if (it != active_clients.end()) {
+                            string formatted_message = "[Whisper from " + to_string(client.socket) + "]: " + whisper_message + "\n";
+                            send(target_socket, formatted_message.c_str(), formatted_message.length(), 0);
+                        }
+                        else {
+                            string error_msg = "User with socket " + target_socket_str + " not found.\n";
+                            send(client.socket, error_msg.c_str(), error_msg.length(), 0);
+                        }
+                    }
+                }
+                else {
+                    // Normal message broadcast
+                    string formatted_message = "Client " + to_string(client.socket) + ": " + message + "\n";
+
+                    cout << "\033[s"; // Save cursor position
+                    cout << "\033[F"; // Move cursor up
+                    cout << "\033[2K"; // Clear the line
+                    cout << formatted_message; // Display the incoming message
+                    cout << "\033[u"; // Restore cursor position
+                    cout << flush;
+
+                    broadcast_message(formatted_message, client.socket);
+                }
             }
         }
         else if (bytes_received == 0 || WSAGetLastError() == WSAECONNRESET) {
