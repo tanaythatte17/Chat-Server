@@ -179,8 +179,11 @@ void handle_client(ClientInfo* client, Database& db) {
                     lock_guard<mutex> lock(client_mutex);
                     auto target_it = find_if(active_clients.begin(), active_clients.end(),
                         [&target_username](ClientInfo* c) { return c->getUsername() == target_username; });
-
-                    if (target_it != active_clients.end()) {
+                    if (target_username == client->getUsername()) {
+                        string error_message = "You cannot have a private conversation with yourself";
+                        send(client->getSocket(), error_message.c_str(), error_message.length(), 0);
+                    }
+                    else if (target_it != active_clients.end()) {
                         client->setUsernameInConvo(target_username);
                         (*target_it)->setUsernameInConvo(client->getUsername());
 
